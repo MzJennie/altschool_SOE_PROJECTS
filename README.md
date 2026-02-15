@@ -13,6 +13,8 @@ The infrastructure was deployed in a custom VPC with the following components:
 
 🖼 Architecture Diagram
 
+
+
                      Internet
                          │
                  ┌───────────────┐
@@ -87,6 +89,10 @@ This helps ensure consistency across environments, and repeatable deployments.
 
 🌍 Direct EC2 Access vs Load Balancer Access
 
+With direct EC2 access, the server’s public IP is exposed to the internet, making it directly reachable and more vulnerable to attacks. Users connect to a specific instance, which limits scalability and creates a single point of failure. If that server goes down, the application becomes unavailable. There is also no built-in traffic distribution, so performance can degrade under heavy load.
+
+In contrast, using an Application Load Balancer (ALB) hides the backend servers inside a private subnet. The ALB acts as a protective layer, exposing only a single public DNS endpoint while routing traffic to multiple private EC2 instances. It distributes requests evenly, performs health checks, and automatically reroutes traffic away from unhealthy servers. This improves security, scalability, availability, and overall user experience.
+
 ❌ Direct EC2 Access - If the web servers had public IPs, this means that anyone can access them directly
 
 User Browser
@@ -113,27 +119,27 @@ NGINX on Port 80
 With an Application Load Balancer: Only ALB is internet-facing, and the web servers remain private.
 Also, traffic is distributed evenly, and refreshing the ALB DNS showed alternating instance hostnames — confirming load balancing worked.
 
+In this project, the ALB approach ensured a more secure, resilient, and production-ready architecture.
+
+
+⚠ Challenges
+
 I encountered some challenges during the task as seen below;
 
-⚠ Challenge 1: SSH From Bastion to Private Web Servers Failed
+- Challenge 1: SSH From Bastion to Private Web Servers Failed
 
-While testing secure access, I successfully SSH’d into the Bastion:
-ssh -A -i ~/key_pairs.pem ubuntu@<BASTION_PUBLIC_IP>
+While I could SSH into the Bastion, I could not "jump" to the private web servers. Even when using the -A (Agent Forwarding) flag, I received a Permission denied (publickey) error. 
 
-However, attempting to SSH from Bastion to the private web server (ssh ubuntu@10.0.2.196) resulted in a Permission denied (publickey) error.
-
-Running: ssh-add -L
-Returned: Could not open a connection to your authentication agent.
-
-During troubleshooting, I noticed that although I used -A (agent forwarding), my local SSH agent was not running. Also, no private key was loaded into the authentication agent. 
+During troubleshooting, I noticed it failed because the local SSH agent was not running on my local Vagrant VM. Also, no private key was loaded into the authentication agent. 
 Hence, Bastion could not access my key, which was why authentication to private servers failed.
 
 ✅ Solution - 
-I ran the following 3 commands on my Vagrant VM:
+
+I ran the following 3 commands on my Vagrant VM to manually initialize the SSH environment to ensure the keys were "live" in memory:
 
 1️⃣ - eval "$(ssh-agent -s)"
 
-This started the SSH authentication agent, Set the required environment variables, and enabled the shell to communicate with the agent
+This started the SSH authentication agent, set the required environment variables, and enabled the shell to communicate with the agent
 
 2️⃣ - ssh-add ~/key_pairs.pem
 
@@ -141,7 +147,8 @@ This added my private key to the agent, and made it available for authentication
 
 3️⃣ - ssh-add -l
 
-This listed the loaded keys, and confirmed successful configuration
+This listed the loaded keys and confirms successful configuration. 
+These steps allowed the Bastion to "borrow" my local key to authenticate with the private servers without storing the actual .pem file on the Bastion itself.
 
 After reconnecting with my Bastion public IP -
 ssh -A -i ~/key_pairs.pem ubuntu@108.131.138.159
@@ -149,38 +156,21 @@ ssh -A -i ~/key_pairs.pem ubuntu@108.131.138.159
 I successfully accessed both private web servers!
 
 
-⚠ Challenge 2: Ansible Playbook Failed (No Internet in Private Subnet)
+- Challenge 2: Ansible Playbook Failed (No Internet in Private Subnet)
 
-The Ansible playbook failed during Install NGINX. This error occurred because:
+After establishing SSH connectivity, the Ansible playbook failed during the Nginx installation. The private web servers could not reach the Ubuntu repositories to download packages. 
 
-- Web servers were inside a private subnet
-- No outbound internet route existed
-- No NAT Gateway configured
-- apt update could not reach Ubuntu repositories
-- Private subnets do not have internet access by default.
+I noticed this was because they were in a private subnet, and they had no route to the internet.
 
 ✅ Solution: Configure NAT Gateway
 
-To enable outbound internet:
+I implemented a NAT Gateway to provide secure outbound-only internet access:
 
-1️⃣ Allocated Elastic IP
+- Allocated an Elastic IP and created a NAT Gateway within the Public Subnet.
+- Updated the Private Route Table to direct all 0.0.0.0/0 traffic to the NAT Gateway.
+This enabled the servers to "reach out" for updates and Nginx installation while still preventing the "public" from reaching in.
 
-EC2 → Elastic IPs → Allocate Elastic IP
-
-2️⃣ Created NAT Gateway
-
-- VPC → NAT Gateways → Create NAT Gateway
-- Connectivity type: Public
-- Subnet: Public subnet
-- Attached Elastic IP
-
-3️⃣ Update the Private Route Table
-
-- VPC → Route Tables → private-rt → Edit routes
-- Destination: 0.0.0.0/0
-- Target: NAT Gateway
-
-After this, the private web servers gained outbound internet access and apt update completed successfully, and the Ansible playbook ran successfully as seen below - 
+The Ansible playbook ran successfully as seen below - 
 
 ansible-playbook -i inventory.ini deploy-nginx.yml
 
