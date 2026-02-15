@@ -15,6 +15,13 @@ The infrastructure was deployed in a custom VPC with the following components:
 
 ![Architecture Diagram](images/architecture.png)
 
+<img src="images/architecture-diagram.png" width="900">
+
+
+
+
+
+
 
 
 
