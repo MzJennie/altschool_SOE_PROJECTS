@@ -13,6 +13,9 @@ The infrastructure was deployed in a custom VPC with the following components:
 
 🖼 Architecture Diagram
 
+![Architecture Diagram](images/Architecture.png)
+
+
 
 
                      Internet
