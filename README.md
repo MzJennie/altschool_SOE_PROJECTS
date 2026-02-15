@@ -13,18 +13,6 @@ The infrastructure was deployed in a custom VPC with the following components:
 
 🖼 Architecture Diagram
 
-![Architecture Diagram](images/architecture.png)
-
-<img src="images/architecture-diagram.png" width="900">
-
-
-
-
-
-
-
-
-
                      Internet
                          │
                  ┌───────────────┐
@@ -37,9 +25,9 @@ The infrastructure was deployed in a custom VPC with the following components:
         │                                 │
  ┌───────────────┐                 ┌───────────────┐
 
- │ Web Server 1  │                 │ Web Server 2  │
+ │ Web Server 1  │                            │ Web Server 2  │
  
- │ (Private Sub) │                 │ (Private Sub) │
+ │ (Private Sub) │                            │ (Private Sub) │
  
  └───────────────┘                 └───────────────┘
         │
